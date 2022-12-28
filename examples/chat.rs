@@ -1,12 +1,12 @@
 use anyhow::anyhow;
-use async_std::fs::{OpenOptions};
+use async_std::fs::OpenOptions;
 use async_std::io;
 use async_std::io::prelude::BufReadExt;
 use clap::Parser;
 use futures::executor::block_on;
 use futures::future::FutureExt;
 use futures::stream::StreamExt;
-use futures::AsyncReadExt;
+use futures::{AsyncReadExt, AsyncWriteExt};
 use libp2p::core::multiaddr::{Multiaddr, Protocol};
 use libp2p::core::transport::OrTransport;
 use libp2p::core::{upgrade, ConnectedPoint};
@@ -54,6 +54,7 @@ impl FromStr for Mode {
 }
 
 const NAMESPACE: &str = "rendezvous";
+const BASE_PATH: &str = "/home/baru/Tmp/libp2p_msg";
 
 #[derive(NetworkBehaviour)]
 #[behaviour(out_event = "Event", event_process = false)]
@@ -247,7 +248,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let line = line.expect("Stdin ont to close");
                     match Command::try_from(line.as_str()) {
                         Ok(Command::ListPeers) => handle_list_peers(&peers).await,
-                        Ok(Command::SendFile { peer_id, file_path }) => { 
+                        Ok(Command::SendFile { peer_id, file_path }) => {
                             if let Err(e) = handle_send_file(&mut swarm, peer_id, file_path).await {
                                 eprintln!("Error: {:?}", e);
                             }
@@ -273,7 +274,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                         info!("{:?}", event)
                     }
                     SwarmEvent::Behaviour(Event::Send(event)) => {
-                        println!("{:?}", event)
+                        if let Err(e) = handle_rev_file(event).await {
+                            eprintln!("Error: {:?}", e);
+                        }
                     }
                     SwarmEvent::Behaviour(Event::Identify(event)) => {
                         info!("{:?}", event)
@@ -321,7 +324,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                                         address.clone()
                                     };
 
-                                //swarm.dial(address_with_p2p).unwrap()
                                 swarm
                                 .dial(
                                     opts.relay_address.clone()
@@ -340,23 +342,17 @@ fn main() -> Result<(), Box<dyn Error>> {
                         peer_id, endpoint, ..
                     } => {
                         println!("Established connection to {:?} via {:?}", peer_id, endpoint);
-                        // swarm.behaviour_mut()
-                        //     .sendmsg
-                        //     .insert(&peer_id);
 
                         peers.entry(peer_id).or_default().insert(endpoint);
 
-                        let peers = swarm.connected_peers();
-                        for p in peers {
-                            println!("peer {}",p);
-                        }
+                        // let peers = swarm.connected_peers();
+                        // for p in peers {
+                        //     println!("peer {}",p);
+                        // }
                     }
 
                     SwarmEvent::ConnectionClosed { peer_id, endpoint ,.. } => {
-                        println!("disconnect {:?} by {:?}", peer_id, endpoint);
-                        /*swarm.behaviour_mut()
-                        .sendmsg
-                        .remove(&peer_id);*/
+                        println!("Disconnect {:?} by {:?}", peer_id, endpoint);
                         if let Some(eps) = peers.get_mut(&peer_id) {
                             eps.remove(&endpoint);
                             if eps.is_empty() {
@@ -433,5 +429,18 @@ async fn handle_send_file(
             break;
         }
     }
+    Ok(())
+}
+
+async fn handle_rev_file(event: libp2p_msg::Event) -> anyhow::Result<()> {
+    let target_file_path = format!("{}/{}", BASE_PATH, event.peer);
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&target_file_path)
+        .await?;
+
+    file.write_all(&event.result.data).await?;
+
     Ok(())
 }

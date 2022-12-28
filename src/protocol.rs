@@ -4,8 +4,6 @@ use libp2p::core::{upgrade, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p::swarm::NegotiatedSubstream;
 use std::{io, iter};
 
-/// read and write msg demo
-
 pub enum Success {
     OK,
 }
@@ -30,7 +28,6 @@ impl InboundUpgrade<NegotiatedSubstream> for MsgContent {
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, socket: NegotiatedSubstream, _: Self::Info) -> Self::Future {
-        //println!("upgrade_inbound");
         async move {
             let packet = recv(socket).await?;
             Ok(packet)
@@ -44,7 +41,6 @@ impl OutboundUpgrade<NegotiatedSubstream> for MsgContent {
     type Error = std::io::Error;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
     fn upgrade_outbound(self, socket: NegotiatedSubstream, _: Self::Info) -> Self::Future {
-        //println!("upgrade_outbound {:?}",self.data);
         async move {
             send(socket, self.data).await?;
             Ok(Success::OK)
@@ -58,7 +54,6 @@ where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     let packet = upgrade::read_length_prefixed(&mut socket, 2048).await?;
-    //println!("{:?}",std::str::from_utf8(&packet).unwrap());
 
     Ok(packet)
 }
@@ -66,6 +61,7 @@ pub async fn send<S>(mut socket: S, data: Vec<u8>) -> io::Result<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
+    println!("write");
     upgrade::write_length_prefixed(&mut socket, data).await?;
     socket.close().await?;
     Ok(socket)

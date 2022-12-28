@@ -6,18 +6,14 @@ use libp2p::swarm::{
 use std::collections::VecDeque;
 use std::task::{Context, Poll};
 
-/// The successful result of processing an inbound or outbound ping.
 #[derive(Debug)]
 pub enum Success {
     OK,
 }
 
-/// Protocol handler that handles pinging the remote at a regular period
-/// and answering ping queries.
-///
-/// If the remote doesn't respond, produces an error that closes the connection.
 pub struct Handler {
     /// Outbound Inbound events
+    #[allow(clippy::type_complexity)]
     queued_events: VecDeque<
         ConnectionHandlerEvent<
             <Self as ConnectionHandler>::OutboundProtocol,
@@ -29,11 +25,16 @@ pub struct Handler {
 }
 
 impl Handler {
-    /// Builds a new `PingHandler` with the given configuration.
     pub fn new() -> Self {
         Handler {
             queued_events: Default::default(),
         }
+    }
+}
+
+impl Default for Handler {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -57,8 +58,6 @@ impl ConnectionHandler for Handler {
 
     //protocol::InboundUpgrade::Output
     fn inject_fully_negotiated_inbound(&mut self, output: Vec<u8>, (): ()) {
-        //println!("inject_fully_negotiated_inbound ");
-
         self.queued_events
             .push_back(ConnectionHandlerEvent::Custom(protocol::MsgContent {
                 data: output,
@@ -66,8 +65,6 @@ impl ConnectionHandler for Handler {
     }
 
     fn inject_fully_negotiated_outbound(&mut self, _output: protocol::Success, (): ()) {
-
-        //println!("inject_fully_negotiated_outbound");
     }
 
     fn inject_event(&mut self, msg: protocol::MsgContent) {
