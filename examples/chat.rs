@@ -1,15 +1,17 @@
 use anyhow::anyhow;
 use async_std::fs::OpenOptions;
-use async_std::io;
 use async_std::io::prelude::BufReadExt;
+use async_std::io::{self};
 use clap::Parser;
 use futures::executor::block_on;
 use futures::future::FutureExt;
 use futures::stream::StreamExt;
 use futures::{AsyncReadExt, AsyncWriteExt};
+use instant::Duration;
 use libp2p::core::multiaddr::{Multiaddr, Protocol};
 use libp2p::core::transport::OrTransport;
 use libp2p::core::{upgrade, ConnectedPoint};
+use libp2p::dcutr;
 use libp2p::dns::DnsConfig;
 use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent, IdentifyInfo};
 use libp2p::noise;
@@ -18,7 +20,6 @@ use libp2p::rendezvous;
 use libp2p::swarm::{SwarmBuilder, SwarmEvent};
 use libp2p::tcp::{GenTcpConfig, TcpTransport};
 use libp2p::Transport;
-use libp2p::{dcutr, Swarm};
 use libp2p::{identity, NetworkBehaviour, PeerId};
 use log::info;
 use std::collections::{BTreeMap, HashSet};
@@ -55,6 +56,7 @@ impl FromStr for Mode {
 
 const NAMESPACE: &str = "rendezvous";
 const BASE_PATH: &str = "/home/baru/Tmp/libp2p_msg";
+const BUFFER_SIZE: usize = 1024 * 1024;
 
 #[derive(NetworkBehaviour)]
 #[behaviour(out_event = "Event", event_process = false)]
@@ -241,17 +243,30 @@ fn main() -> Result<(), Box<dyn Error>> {
         .listen_on(opts.relay_address.clone().with(Protocol::P2pCircuit))
         .unwrap();
 
+    let (file_tx, file_rx) = async_std::channel::unbounded();
+
     block_on(async {
         loop {
+            let file_tx = file_tx.clone();
             futures::select! {
+                file_data = file_rx.recv().fuse() => {
+                    match file_data {
+                        Ok((peer_id, data)) => {
+                            swarm.behaviour_mut().sendmsg.send(data, peer_id);
+                        }
+                        Err(e) => eprint!("Error: {:?}", e),
+                    }
+                }
                 line = stdin.select_next_some() => {
                     let line = line.expect("Stdin ont to close");
                     match Command::try_from(line.as_str()) {
                         Ok(Command::ListPeers) => handle_list_peers(&peers).await,
                         Ok(Command::SendFile { peer_id, file_path }) => {
-                            if let Err(e) = handle_send_file(&mut swarm, peer_id, file_path).await {
-                                eprintln!("Error: {:?}", e);
-                            }
+                            async_std::task::spawn(async move {
+                                if let Err(e) = handle_send_file(peer_id, file_path, file_tx).await {
+                                    eprintln!("Error: {:?}", e);
+                                }
+                            });
                         }
                         Err(_) => eprintln!("Wrong command, available commans are: ls, file <PeerId> <File Path>"),
                         _ => {}
@@ -416,18 +431,22 @@ async fn handle_list_peers(peers: &BTreeMap<PeerId, HashSet<ConnectedPoint>>) {
 }
 
 async fn handle_send_file(
-    swarm: &mut Swarm<Behaviour>,
     peer_id: PeerId,
     file_path: PathBuf,
+    file_tx: async_std::channel::Sender<(PeerId, Vec<u8>)>,
 ) -> anyhow::Result<()> {
     let mut file = OpenOptions::new().read(true).open(file_path).await?;
-    let mut buf = [0; 1024];
     loop {
+        let mut buf = vec![0; BUFFER_SIZE];
         let n = file.read(&mut buf).await?;
-        swarm.behaviour_mut().sendmsg.send(buf, peer_id);
         if n == 0 {
             break;
         }
+        // 当读取到的数据没有充满缓冲区时，截断掉没有存放数据的部分
+        buf.truncate(n);
+        file_tx.send((peer_id, buf)).await?;
+        // 加入延迟，以免服务器因读取文件抢占了太多资源，影响其他任务工作
+        async_std::task::sleep(Duration::from_millis(15)).await;
     }
     Ok(())
 }

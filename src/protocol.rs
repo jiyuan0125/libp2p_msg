@@ -53,7 +53,7 @@ pub async fn recv<S>(mut socket: S) -> io::Result<Vec<u8>>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    let packet = upgrade::read_length_prefixed(&mut socket, 2048).await?;
+    let packet = upgrade::read_length_prefixed(&mut socket, usize::MAX).await?;
 
     Ok(packet)
 }
@@ -61,7 +61,6 @@ pub async fn send<S>(mut socket: S, data: Vec<u8>) -> io::Result<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    println!("write");
     upgrade::write_length_prefixed(&mut socket, data).await?;
     socket.close().await?;
     Ok(socket)

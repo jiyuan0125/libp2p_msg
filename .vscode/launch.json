@@ -1,0 +1,67 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'libp2p-msg'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=libp2p-msg"
+                ],
+                "filter": {
+                    "name": "libp2p-msg",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'chat'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=chat",
+                    "--package=libp2p-msg"
+                ],
+                "filter": {
+                    "name": "chat",
+                    "kind": "example"
+                }
+            },
+            "args": [
+                "--relay-address",
+                "/ip4/127.0.0.1/tcp/45678/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN"
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'chat'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=chat",
+                    "--package=libp2p-msg"
+                ],
+                "filter": {
+                    "name": "chat",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
